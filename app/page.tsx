@@ -3,6 +3,12 @@
 import { useState, useCallback, useRef } from "react";
 
 type Status = "idle" | "uploading" | "processing" | "done" | "error";
+type Provider = "mistral" | "openai";
+
+const PROVIDERS: { id: Provider; name: string; model: string }[] = [
+  { id: "mistral", name: "Mistral", model: "mistral-ocr-latest" },
+  { id: "openai", name: "OpenAI", model: "gpt-5.1" },
+];
 
 export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
@@ -12,6 +18,8 @@ export default function Home() {
   const [pageCount, setPageCount] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [provider, setProvider] = useState<Provider>("mistral");
+  const [usedProvider, setUsedProvider] = useState<Provider>("mistral");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processFile = useCallback(async (file: File) => {
@@ -33,6 +41,7 @@ export default function Home() {
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("provider", provider);
 
     try {
       setStatus("processing");
@@ -50,12 +59,13 @@ export default function Home() {
       setResult(data.text);
       setFilename(data.filename);
       setPageCount(data.pageCount);
+      setUsedProvider(data.provider || provider);
       setStatus("done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setStatus("error");
     }
-  }, []);
+  }, [provider]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -112,6 +122,8 @@ export default function Home() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
+  const currentProvider = PROVIDERS.find((p) => p.id === provider);
+
   return (
     <div className="min-h-screen bg-[#0c0c0c] text-zinc-100 font-mono">
       <div className="max-w-4xl mx-auto px-6 py-16">
@@ -120,10 +132,54 @@ export default function Home() {
           <h1 className="text-3xl font-bold tracking-tight text-white mb-2">
             PDF → llms.txt
           </h1>
-          <p className="text-zinc-500 text-sm">
-            Extract and optimize PDF content for LLM ingestion using Mistral OCR
+          <p className="text-zinc-500 text-sm mb-6">
+            Extract and optimize PDF content for LLM ingestion
           </p>
+          <div className="flex items-center gap-6 text-xs text-zinc-600">
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-zinc-800 text-zinc-400 flex items-center justify-center text-[10px]">1</span>
+              <span>Upload PDF</span>
+            </div>
+            <span className="text-zinc-800">→</span>
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-zinc-800 text-zinc-400 flex items-center justify-center text-[10px]">2</span>
+              <span>OCR extracts text</span>
+            </div>
+            <span className="text-zinc-800">→</span>
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-zinc-800 text-zinc-400 flex items-center justify-center text-[10px]">3</span>
+              <span>Download clean .txt</span>
+            </div>
+          </div>
         </header>
+
+        {/* Provider Selector */}
+        {status !== "done" && (
+          <div className="mb-6">
+            <label className="text-xs text-zinc-500 mb-2 block">OCR Provider</label>
+            <div className="flex gap-2">
+              {PROVIDERS.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setProvider(p.id)}
+                  disabled={status === "processing" || status === "uploading"}
+                  className={`
+                    px-4 py-2 text-sm rounded-lg border transition-all
+                    ${
+                      provider === p.id
+                        ? "bg-zinc-800 border-zinc-700 text-white"
+                        : "bg-transparent border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-400"
+                    }
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                  `}
+                >
+                  <span className="font-medium">{p.name}</span>
+                  <span className="text-zinc-600 ml-2 text-xs">{p.model}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Drop Zone */}
         {status !== "done" && (
@@ -187,7 +243,7 @@ export default function Home() {
                 <p className="text-zinc-300">
                   {status === "uploading"
                     ? "Uploading..."
-                    : "Processing with Mistral OCR..."}
+                    : `Processing with ${currentProvider?.name}...`}
                 </p>
                 <p className="text-zinc-600 text-xs mt-2">
                   This may take a moment for large documents
@@ -242,6 +298,10 @@ export default function Home() {
                 <span className="text-zinc-500 text-sm">
                   {(result.length / 1024).toFixed(1)} KB
                 </span>
+                <span className="text-zinc-700">•</span>
+                <span className="text-xs px-2 py-0.5 bg-zinc-800 rounded text-zinc-400">
+                  {PROVIDERS.find((p) => p.id === usedProvider)?.name}
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -291,8 +351,29 @@ export default function Home() {
           </div>
         )}
 
+        {/* What is llms.txt */}
+        <section className="mt-16 p-6 bg-zinc-950 border border-zinc-800 rounded-xl">
+          <h2 className="text-sm font-medium text-zinc-300 mb-3">What is llms.txt?</h2>
+          <p className="text-xs text-zinc-500 leading-relaxed mb-3">
+            llms.txt is a standard for providing LLMs with clean, structured text they can actually read. 
+            Unlike messy HTML with nav bars and ads, llms.txt gives AI models exactly what they need — 
+            markdown-formatted content that&apos;s easy to parse and understand.
+          </p>
+          <p className="text-xs text-zinc-600">
+            Perfect for feeding documentation, research papers, or any PDF into ChatGPT, Claude, or your RAG pipeline.{" "}
+            <a
+              href="https://llmstxt.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-zinc-500 hover:text-zinc-400 underline underline-offset-2"
+            >
+              Learn more →
+            </a>
+          </p>
+        </section>
+
         {/* Footer */}
-        <footer className="mt-16 pt-8 border-t border-zinc-900">
+        <footer className="mt-8 pt-8 border-t border-zinc-900">
           <p className="text-zinc-600 text-xs text-center">
             Powered by{" "}
             <a
@@ -302,6 +383,15 @@ export default function Home() {
               className="text-zinc-500 hover:text-zinc-400 underline underline-offset-2"
             >
               Mistral OCR
+            </a>
+            {" & "}
+            <a
+              href="https://platform.openai.com/docs/api-reference/responses"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-zinc-500 hover:text-zinc-400 underline underline-offset-2"
+            >
+              OpenAI
             </a>
           </p>
         </footer>
